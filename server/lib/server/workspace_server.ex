@@ -54,14 +54,14 @@ defmodule Server.WorkspaceServer do
           {:ok, output} = result ->
             PubSub.broadcast(Server.PubSub, "workspace_events", {:command_completed, node, command, output})
             {:reply, result, state}
-          {:error, _} = error ->
-            PubSub.broadcast(Server.PubSub, "workspace_events", {:command_failed, node, command, error})
-            {:reply, error, state}
+          {:error, %{output: output} = error} ->
+            PubSub.broadcast(Server.PubSub, "workspace_events", {:command_failed, node, command, output})
+            {:reply, {:error, error}, state}
         end
       catch
         :exit, _ ->
           error = {:error, :node_unavailable}
-          PubSub.broadcast(Server.PubSub, "workspace_events", {:command_failed, node, command, error})
+          PubSub.broadcast(Server.PubSub, "workspace_events", {:command_failed, node, command, "Node is unavailable"})
           {:reply, error, state}
       end
     else

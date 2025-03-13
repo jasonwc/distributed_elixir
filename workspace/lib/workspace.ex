@@ -10,12 +10,12 @@ defmodule Workspace do
   @server_node :"server@127.0.0.1"
   @connect_retry_interval 1_000 # 1 second
 
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @impl true
-  def init(_state) do
+  def init(_opts) do
     # Start connection process
     send(self(), :connect_to_server)
     {:ok, %{connected: false}}
@@ -26,7 +26,6 @@ defmodule Workspace do
     if Node.connect(@server_node) do
       Logger.info("Connected to server node")
       # Start sending status updates
-      send_status()
       schedule_status_update()
       {:noreply, %{state | connected: true}}
     else
@@ -49,40 +48,39 @@ defmodule Workspace do
   def handle_call({:execute_command, command}, _from, state) do
     Logger.info("Executing command: #{command}")
     
-    try do
-      case System.shell(command) do
-        {output, 0} -> 
-          Logger.info("Command completed successfully")
-          {:reply, {:ok, output}, state}
-        {output, status} -> 
-          Logger.warning("Command failed with status #{status}")
-          {:reply, {:error, %{output: output, status: status}}, state}
-      end
-    rescue
-      e -> 
-        Logger.error("Command execution failed: #{inspect(e)}")
-        {:reply, {:error, %{output: "Command execution failed", error: e}}, state}
+    # Use port to capture both stdout and stderr
+    port = Port.open({:spawn, "#{command} 2>&1"}, [:exit_status, :binary, :stderr_to_stdout])
+    
+    result = receive do
+      {^port, {:data, output}} ->
+        receive do
+          {^port, {:exit_status, 0}} ->
+            {:ok, output}
+          {^port, {:exit_status, status}} ->
+            {:error, %{output: output, status: status}}
+        end
+    after
+      30_000 ->
+        Port.close(port)
+        {:error, %{output: "Command timed out after 30 seconds", status: 1}}
     end
+    
+    {:reply, result, state}
   end
 
   defp send_status do
-    status = %{
-      node: Node.self(),
-      timestamp: DateTime.utc_now(),
-      memory: :erlang.memory(),
-      uptime: :erlang.statistics(:wall_clock) |> elem(0)
-    }
-
     try do
+      {total_time, _} = :erlang.statistics(:wall_clock)
+      status = %{
+        node: Node.self(),
+        uptime: total_time,
+        memory: :erlang.memory(),
+        timestamp: DateTime.utc_now()
+      }
       GenServer.call({:WorkspaceServer, @server_node}, {:workspace_status, status})
     catch
-      :exit, _ -> 
-        Logger.warning("Could not send status to server")
-        # Try to reconnect
-        send(self(), :connect_to_server)
-      :error, _ -> 
-        Logger.warning("Could not send status to server")
-        # Try to reconnect
+      :exit, _ ->
+        # If sending status fails, try reconnecting to server
         send(self(), :connect_to_server)
     end
   end
