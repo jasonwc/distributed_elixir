@@ -71,10 +71,12 @@ defmodule Workspace do
   defp send_status do
     try do
       {total_time, _} = :erlang.statistics(:wall_clock)
+      {cpu_time, _} = :erlang.statistics(:runtime)
       status = %{
         node: Node.self(),
         uptime: total_time,
         memory: :erlang.memory(),
+        cpu: cpu_time,
         timestamp: DateTime.utc_now()
       }
       GenServer.call({:WorkspaceServer, @server_node}, {:workspace_status, status})

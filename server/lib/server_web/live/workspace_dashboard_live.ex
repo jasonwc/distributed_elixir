@@ -86,6 +86,7 @@ defmodule ServerWeb.WorkspaceDashboardLive do
                     <p class="text-sm text-gray-500">
                       Uptime: <%= format_uptime(status.uptime) %><br/>
                       Memory: <%= format_memory(status.memory) %><br/>
+                      CPU: <%= format_cpu(status.cpu) %><br/>
                       Last Update: <%= format_timestamp(status.timestamp) %>
                     </p>
                   </div>
@@ -159,12 +160,18 @@ defmodule ServerWeb.WorkspaceDashboardLive do
     "#{days}d #{hours}h #{minutes}m #{seconds}s"
   end
 
-  defp format_memory(memory) when is_map(memory) do
-    total = memory[:total]
+  defp format_memory(memory) when is_list(memory) do
+    total = Keyword.get(memory, :total, 0)
     mb = Float.round(total / 1024 / 1024, 2)
     "#{mb} MB"
   end
   defp format_memory(_), do: "N/A"
+
+  defp format_cpu(cpu) when is_integer(cpu) do
+    seconds = div(cpu, 1000)  # Convert milliseconds to seconds
+    "#{seconds}s"
+  end
+  defp format_cpu(_), do: "N/A"
 
   defp format_timestamp(%DateTime{} = timestamp) do
     Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%S")
