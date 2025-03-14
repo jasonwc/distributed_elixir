@@ -8,9 +8,11 @@ defmodule ServerWeb.WorkspaceDashboardLive do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Server.PubSub, "workspace_events")
       workspaces = WorkspaceServer.get_workspaces()
-      {:ok, assign(socket, workspaces: workspaces, command: "", selected_node: nil, command_results: %{})}
+      {:ok, assign(socket, workspaces: workspaces, command: "", selected_node: nil, command_results: %{})
+            |> assign(:page_title, "Dashboard")}
     else
-      {:ok, assign(socket, workspaces: %{}, command: "", selected_node: nil, command_results: %{})}
+      {:ok, assign(socket, workspaces: %{}, command: "", selected_node: nil, command_results: %{})
+            |> assign(:page_title, "Dashboard")}
     end
   end
 
@@ -31,6 +33,12 @@ defmodule ServerWeb.WorkspaceDashboardLive do
     workspaces = Map.delete(socket.assigns.workspaces, node)
     command_results = Map.delete(socket.assigns.command_results, node)
     {:noreply, assign(socket, workspaces: workspaces, command_results: command_results)}
+  end
+
+  @impl true
+  def handle_info({:new_event, _event}, socket) do
+    # We don't need to do anything with new events in the workspace dashboard
+    {:noreply, socket}
   end
 
   @impl true
@@ -72,8 +80,6 @@ defmodule ServerWeb.WorkspaceDashboardLive do
   def render(assigns) do
     ~H"""
     <div class="p-4">
-      <h1 class="text-2xl font-bold mb-4">Workspace Dashboard</h1>
-      
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="bg-white rounded-lg shadow p-4">
           <h2 class="text-xl font-semibold mb-4">Connected Workspaces</h2>
@@ -177,4 +183,4 @@ defmodule ServerWeb.WorkspaceDashboardLive do
     Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%S")
   end
   defp format_timestamp(_), do: "N/A"
-end 
+end

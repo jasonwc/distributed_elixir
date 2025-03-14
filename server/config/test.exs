@@ -12,3 +12,12 @@ config :logger, level: :warning
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
+
+# Configure the database
+config :server, Server.Repo,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "server_test#{System.get_env("MIX_TEST_PARTITION")}",
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 10

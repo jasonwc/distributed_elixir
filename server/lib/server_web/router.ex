@@ -18,6 +18,7 @@ defmodule ServerWeb.Router do
     pipe_through :browser
 
     live "/", WorkspaceDashboardLive
+    live "/events", EventHistoryLive
   end
 
   # Other scopes may use custom stacks.

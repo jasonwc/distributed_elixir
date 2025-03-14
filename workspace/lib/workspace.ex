@@ -27,6 +27,8 @@ defmodule Workspace do
       Logger.info("Connected to server node")
       # Start sending status updates
       schedule_status_update()
+      # Send initial connection event
+      send_event_to_server("system", "Workspace node started", %{"node_name" => to_string(Node.self())})
       {:noreply, %{state | connected: true}}
     else
       Logger.warning("Failed to connect to server node, retrying in #{@connect_retry_interval}ms")
@@ -47,10 +49,10 @@ defmodule Workspace do
   @impl true
   def handle_call({:execute_command, command}, _from, state) do
     Logger.info("Executing command: #{command}")
-    
+
     # Use port to capture both stdout and stderr
     port = Port.open({:spawn, "#{command} 2>&1"}, [:exit_status, :binary, :stderr_to_stdout])
-    
+
     result = receive do
       {^port, {:data, output}} ->
         receive do
@@ -64,8 +66,18 @@ defmodule Workspace do
         Port.close(port)
         {:error, %{output: "Command timed out after 30 seconds", status: 1}}
     end
-    
+
     {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call({:send_event, type, message, metadata}, _from, state) do
+    if state.connected do
+      result = send_event_to_server(type, message, metadata)
+      {:reply, result, state}
+    else
+      {:reply, {:error, :not_connected}, state}
+    end
   end
 
   defp send_status do
@@ -87,7 +99,43 @@ defmodule Workspace do
     end
   end
 
+  defp send_event_to_server(type, message, metadata \\ %{}) do
+    try do
+      Logger.info("Sending event to server: type=#{type}, message=#{message}, metadata=#{inspect(metadata)}")
+      result = GenServer.call({:WorkspaceServer, @server_node}, {:workspace_event, Node.self(), type, message, metadata})
+      Logger.info("Event sent successfully: #{inspect(result)}")
+      result
+    catch
+      :exit, reason ->
+        # If sending event fails, try reconnecting to server
+        Logger.error("Failed to send event to server: #{inspect(reason)}")
+        send(self(), :connect_to_server)
+        {:error, :server_unavailable}
+    end
+  end
+
   defp schedule_status_update do
     Process.send_after(self(), :update_status, 5000) # Update every 5 seconds
+  end
+
+  # Public API
+
+  @doc """
+  Sends a custom event to the server.
+
+  ## Parameters
+
+    * `type` - The event type (e.g., "system", "application", "error")
+    * `message` - A descriptive message for the event
+    * `metadata` - Optional map of additional data related to the event
+
+  ## Examples
+
+      iex> Workspace.send_event("application", "User logged in", %{"user_id" => 123})
+      {:ok, %Event{}}
+
+  """
+  def send_event(type, message, metadata \\ %{}) do
+    GenServer.call(__MODULE__, {:send_event, type, message, metadata})
   end
 end

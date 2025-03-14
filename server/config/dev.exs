@@ -51,3 +51,13 @@ config :phoenix, :stacktrace_depth, 20
 
 # Initialize plugs at runtime for faster development compilation
 config :phoenix, :plug_init_mode, :runtime
+
+# Configure the database
+config :server, Server.Repo,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "server_dev",
+  stacktrace: true,
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10
